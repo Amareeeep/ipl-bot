@@ -22,38 +22,78 @@ last_comment = ""
 over_data = []
 
 
-def fetch_commentary():
+def get_live_commentary_url():
     url = "https://www.cricbuzz.com/live-cricket-scores"
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    headers = {"User-Agent": "Mozilla/5.0"}
 
     try:
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
     except requests.RequestException as e:
-        logging.error(f"Request failed: {e}")
+        logging.error(f"Failed to fetch live scores page: {e}")
         return None
 
     soup = BeautifulSoup(response.text, "html.parser")
 
+    # Try to find a "Full Commentary" link first
+    for a in soup.find_all("a", href=True):
+        text = a.get_text(" ", strip=True).lower()
+        href = a["href"]
+
+        if "full commentary" in text and "/live-cricket-full-commentary/" in href:
+            if href.startswith("http"):
+                return href
+            return "https://www.cricbuzz.com" + href
+
+    logging.warning("No live full commentary link found")
+    return None
+
+
+def fetch_commentary():
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    commentary_url = get_live_commentary_url()
+    if not commentary_url:
+        return None
+
+    try:
+        response = requests.get(commentary_url, headers=headers, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        logging.error(f"Failed to fetch commentary page: {e}")
+        return None
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    # Try common containers
     selectors = [
-        "div.cb-comm-ln",
         "div.cb-com-ln",
-        "div.comment-text",
-        "div.live-commentary-item div.comment",
+        "div.cb-comm-ln",
+        "p.cb-com-ln",
+        "div.commentary-text",
+        "div.commtext",
     ]
 
     for selector in selectors:
-        elem = soup.select_one(selector)
-        if elem:
+        elems = soup.select(selector)
+        for elem in elems:
             text = elem.get_text(" ", strip=True)
-            if text:
+            if text and len(text) > 8:
                 return text
 
-    logging.warning("No commentary element found")
-    return None
+    # fallback: scan visible text blocks for ball-like strings
+    for tag in soup.find_all(["div", "p", "span"]):
+        text = tag.get_text(" ", strip=True)
+        if text and "." in text and len(text) > 15:
+            parts = text.split()
+            first = parts[0] if parts else ""
+            if "." in first:
+                nums = first.split(".")
+                if len(nums) == 2 and nums[0].isdigit() and nums[1].isdigit():
+                    return text
 
+    logging.warning("No commentary element found on commentary page")
+    return None
 
 def parse_ball_number(comment):
     words = comment.split()
