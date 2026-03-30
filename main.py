@@ -162,16 +162,20 @@ def run_bot():
         try:
             comment = fetch_commentary()
 
-if not comment:
-    time.sleep(15)
-    continue
+            # 👇 agar commentary nahi mili toh skip
+            if not comment:
+                logging.info("No live commentary right now...")
+                time.sleep(15)
+                continue
 
-if comment != last_comment:
+            # 👇 new comment check
+            if comment != last_comment:
+                ball = parse_ball_number(comment)
 
                 if ball and ball != last_ball:
                     event, run = detect_event(comment)
-                    over_data.append(run)
 
+                    over_data.append(run)
                     send_ball_update(ball, event, comment)
 
                     if ball.endswith(".6"):
