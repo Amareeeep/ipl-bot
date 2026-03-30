@@ -1,18 +1,39 @@
-from pycricbuzz import Cricbuzz
+import requests
+from bs4 import BeautifulSoup
 import time
 import telebot
+import re
 
 BOT_TOKEN = "8716019997:AAEYodES3bkjOXGxRXvC1D-wA65xqUM8jBk"
 CHANNEL_ID = "@nextballLive"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-c = Cricbuzz()
-
 last_ball = ""
 over_data = []
 
 
+# ---------------- FETCH (CRICBUZZ BASIC) ---------------- #
+def fetch_data():
+    try:
+        url = "https://www.cricbuzz.com/live-cricket-scores"
+        headers = {"User-Agent": "Mozilla/5.0"}
+
+        r = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        comm = soup.select_one("div.cb-comm-ln")
+        score = soup.select_one("div.cb-lv-scrs-col")
+
+        if comm and score:
+            return comm.get_text(strip=True), score.get_text(strip=True)
+    except:
+        return None, None
+
+    return None, None
+
+
+# ---------------- EVENT ---------------- #
 def detect_event(text):
     t = text.lower()
 
@@ -20,7 +41,7 @@ def detect_event(text):
         return "🔥 FOUR!!!", "4"
     elif "six" in t:
         return "💣 SIX!!!", "6"
-    elif "out" in t or "wicket" in t:
+    elif "out" in t:
         return "💀 WICKET!!!", "W"
     elif "wide" in t:
         return "⚠️ WIDE", "Wd"
@@ -30,75 +51,46 @@ def detect_event(text):
         return "⚡ 1 RUN", "1"
     elif "2 runs" in t:
         return "⚡ 2 RUNS", "2"
-    elif "3 runs" in t:
-        return "⚡ 3 RUNS", "3"
     else:
         return "⚡ DOT BALL", "0"
 
 
+# ---------------- PLAYER EXTRACT ---------------- #
 def extract_players(text):
     try:
-        parts = text.split(",")[0]
-        if " to " in parts:
-            bowler, batsman = parts.split(" to ")
+        first = text.split(",")[0]
+        if " to " in first:
+            bowler, batsman = first.split(" to ")
             return bowler.strip(), batsman.strip()
     except:
         pass
-    return "", ""
+    return "Bowler", "Batsman"
 
 
+# ---------------- BALL ---------------- #
+def extract_ball(text):
+    parts = text.split()
+    if parts and "." in parts[0]:
+        return parts[0]
+    return ""
+
+
+# ---------------- RUN BOT ---------------- #
 def run_bot():
     global last_ball, over_data
 
-    print("🔥 VIP PRO BOT RUNNING 🔥")
+    print("🔥 FULL PRO BOT RUNNING 🔥")
 
     while True:
         try:
-            matches = c.matches()
-            if not matches:
+            text, score_raw = fetch_data()
+
+            if not text:
+                print("No data...")
                 time.sleep(10)
                 continue
 
-            match = matches[0]
-            match_id = match['id']
-            team1 = match['team1']['name']
-            team2 = match['team2']['name']
-
-            score = c.livescore(match_id)
-
-            try:
-                runs = int(score['score'][0]['runs'])
-                wickets = score['score'][0]['wickets']
-                overs = float(score['score'][0]['overs'])
-                score_text = f"{runs}/{wickets}"
-            except:
-                runs, overs = 0, 1
-                score_text = "Loading..."
-                overs = 1
-
-            # CRR
-            crr = round(runs / overs, 2)
-
-            # Required runs (dummy target logic)
-            target = 200  # change later dynamically
-            runs_needed = target - runs
-            balls_left = int((20 - overs) * 6)
-
-            if balls_left > 0:
-                rrr = round((runs_needed / balls_left) * 6, 2)
-            else:
-                rrr = 0
-
-            comm = c.commentary(match_id)
-
-            if not comm or "commentary" not in comm:
-                time.sleep(10)
-                continue
-
-            latest = comm['commentary'][-1]
-
-            ball = str(latest.get("over", ""))
-            text = latest.get("comm", "")
+            ball = extract_ball(text)
 
             if ball and ball != last_ball:
 
@@ -107,16 +99,42 @@ def run_bot():
 
                 bowler, batsman = extract_players(text)
 
-                msg = f"""
-🏏 {team1} vs {team2}
+                # SCORE PARSE
+                try:
+                    match = re.search(r"(\d+)\/(\d+)", score_raw)
+                    overs = re.search(r"\((.*?)\)", score_raw)
 
-📊 {score_text} ({overs})
+                    runs = int(match.group(1))
+                    wickets = int(match.group(2))
+                    overs_val = float(overs.group(1))
+                except:
+                    runs, wickets, overs_val = 0, 0, 1
+
+                # CRR
+                crr = round(runs / overs_val, 2)
+
+                # TARGET (JUGAAD)
+                target = 200
+                balls_left = int((20 - overs_val) * 6)
+                runs_needed = target - runs
+
+                if balls_left > 0:
+                    rrr = round((runs_needed / balls_left) * 6, 2)
+                else:
+                    rrr = 0
+
+                # ---------------- FINAL FORMAT ---------------- #
+                msg = f"""
+🏏 MATCH LIVE
+
+📊 {runs}/{wickets} ({overs_val})
 CRR: {crr}
 
-🎯 {bowler} to {batsman}
+🎯 {bowler} ➝ {batsman}
 {event}
 
-⚡ Need {runs_needed} in {balls_left} balls
+⏳ Balls Left: {balls_left}
+⚡ Need {runs_needed} runs
 RRR: {rrr}
 
 📝 {text}
@@ -124,23 +142,23 @@ RRR: {rrr}
 
                 bot.send_message(CHANNEL_ID, msg)
 
+                # OVER COMPLETE
                 if ball.endswith(".6"):
                     over_msg = f"""
 🔥 OVER COMPLETE
-
-⚡ This Over: {' '.join(over_data)}
+⚡ {' '.join(over_data)}
 """
                     bot.send_message(CHANNEL_ID, over_msg)
                     over_data = []
 
                 last_ball = ball
 
-            time.sleep(5)
+            time.sleep(3)
 
         except Exception as e:
             print("Error:", e)
             time.sleep(10)
 
 
-if __name__ == "__main__":
+if name == "__main__":
     run_bot()
