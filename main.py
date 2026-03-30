@@ -92,7 +92,7 @@ def fetch_commentary():
                 if len(nums) == 2 and nums[0].isdigit() and nums[1].isdigit():
                     return text
 
-    logging.warning("No commentary element found on commentary page")
+    logging.warning("No live commentary found on right now")
     return None
 
 def parse_ball_number(comment):
@@ -162,8 +162,11 @@ def run_bot():
         try:
             comment = fetch_commentary()
 
-            if comment and comment != last_comment:
-                ball = parse_ball_number(comment)
+if not comment:
+    time.sleep(15)
+    continue
+
+if comment != last_comment:
 
                 if ball and ball != last_ball:
                     event, run = detect_event(comment)
