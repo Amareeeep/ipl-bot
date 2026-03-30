@@ -22,11 +22,26 @@ def fetch_data():
         r = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
 
-        comm = soup.select_one("div.cb-comm-ln")
-        score = soup.select_one("div.cb-lv-scrs-col")
+        # STEP 1: match link nikaal
+        match_link = soup.find("a", href=True)
 
-        if comm and score:
-            return comm.get_text(strip=True), score.get_text(strip=True)
+        if not match_link:
+            return None, None
+
+        link = "https://www.cricbuzz.com" + match_link['href']
+
+        # STEP 2: commentary page open
+        comm_url = link.replace("live-cricket-scores", "live-cricket-commentary")
+
+        r2 = requests.get(comm_url, headers=headers, timeout=10)
+        soup2 = BeautifulSoup(r2.text, "html.parser")
+
+        comm = soup2.find("div", class_="cb-com-ln")
+        score = soup2.find("div", class_="cb-scrcrd-status")
+
+        if comm:
+            return comm.get_text(strip=True), str(score)
+
     except:
         return None, None
 
