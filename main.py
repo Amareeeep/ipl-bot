@@ -8,8 +8,8 @@ from telebot.apihelper import ApiTelegramException
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-BOT_TOKEN = os.getenv("8716019997:AAEYodES3bkjOXGxRXvC1D-wA65xqUM8jBk")
-CHANNEL_ID = os.getenv("@nextballLive")
+BOT_TOKEN = ("8716019997:AAEYodES3bkjOXGxRXvC1D-wA65xqUM8jBk")
+CHANNEL_ID = ("@nextballLive")
 
 if not BOT_TOKEN or not CHANNEL_ID:
     logging.error("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHANNEL_ID")
